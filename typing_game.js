@@ -76,14 +76,20 @@ class Enemy {
   }
 
   adjustYPosition() {
+    const minY = 120;
+    const maxY = canvas.height - minY;
+
+    if (this.y_pos < minY) this.y_pos = minY;
+    else if (this.y_pos > maxY) this.y_pos = maxY;
+
     let overlap = true;
-    let maxAttempts = 10;
+    let maxAttempts = 50;
     while (overlap && maxAttempts > 0) {
       overlap = false;
       for (const enemy of enemies) {
         if (enemy !== this && Math.abs(enemy.y_pos - this.y_pos) < 40) {
           overlap = true;
-          this.y_pos += 20;
+          this.y_pos += 30;
           if (this.y_pos > canvas.height) {
             this.y_pos = 20;
           }
@@ -315,8 +321,6 @@ function draw() {
       break;
   }
 
-  console.log(`Gamestate: ${gameState}`);
-
   // places user-inputs in bottom right corner
   word_x = (canvas.width / 100) * 70;
   word_y = (canvas.height / 100) * 75;
@@ -343,11 +347,11 @@ function draw() {
         } else if (current_word === "options" && gameState !== "running") {
           gameState = "menu"; // turn on settings menu
         }
-      }
-      if (gameState !== "game_over") {
-        enemies[focusedEnemy].dead = true; // random_word is destroyed
-        word_counter++; // increase eniemies destroyed
-        current_word = ""; // word is reset
+        if (gameState !== "game_over") {
+          enemies[focusedEnemy].dead = true; // random_word is destroyed
+          word_counter++; // increase eniemies destroyed
+          current_word = ""; // word is reset
+        }
       }
     } else if (chr === "backspace") {
       current_word = current_word.slice(0, -1); // removes last character
