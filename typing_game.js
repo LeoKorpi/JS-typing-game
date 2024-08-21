@@ -71,6 +71,27 @@ class Enemy {
     this.dead = dead;
     this.placeholder_x = placeholder_x;
     this.chrs_correct = chrs_correct;
+
+    this.adjustYPosition();
+  }
+
+  adjustYPosition() {
+    let overlap = true;
+    let maxAttempts = 10;
+    while (overlap && maxAttempts > 0) {
+      overlap = false;
+      for (const enemy of enemies) {
+        if (enemy !== this && Math.abs(enemy.y_pos - this.y_pos) < 40) {
+          overlap = true;
+          this.y_pos += 20;
+          if (this.y_pos > canvas.height) {
+            this.y_pos = 20;
+          }
+          break;
+        }
+      }
+      maxAttempts--;
+    }
   }
 
   draw() {
@@ -78,11 +99,10 @@ class Enemy {
       this.placeholder_x = this.x_pos; // set placeholder
       for (var i = 0; i < this.text.length; i++) {
         var ch = this.text.charAt(i);
-        if (i < this.chrs_correct && this == enemies[focusedEnemy]) {
-          ctx.fillStyle = "green";
-        } else {
-          ctx.fillStyle = "white";
-        }
+        ctx.fillStyle =
+          i < this.chrs_correct && this == enemies[focusedEnemy]
+            ? "green"
+            : "white";
         ctx.font = "32px Arial";
         ctx.fillText(ch, this.x_pos, this.y_pos);
         this.x_pos += ctx.measureText(ch).width;
@@ -92,11 +112,7 @@ class Enemy {
       this.text = word_list[Math.floor(Math.random() * word_list.length)];
       this.x_pos = 0;
       this.y_pos = Math.floor(Math.random() * canvas.height);
-      if (this.y_pos > canvas.height / 2) {
-        this.y_pos -= 20;
-      } else {
-        this.y_pos += 20;
-      }
+      this.adjustYPosition();
       this.dead = false;
     }
   }
@@ -316,11 +332,10 @@ function draw() {
         if (gameState === "menu") {
           if (current_word === "regular") {
             difficulty = 1;
-            gameState = "running";
           } else if (current_word === "extreme") {
             difficulty = 1.5;
-            gameState = "running";
           }
+          gameState = "running";
         } else if (current_word === "r" && gameState === "game_over") {
           resetGame();
         } else if (current_word === "start") {
