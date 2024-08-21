@@ -1,8 +1,6 @@
 // CANVAS AND CTX CREATION
 const canvas = document.createElement("canvas");
 const ctx = canvas.getContext("2d");
-canvas.width = window.innerWidth;
-canvas.height = window.innerHeight;
 
 document.getElementsByTagName("body")[0].appendChild(canvas);
 document.addEventListener("keydown", key_down_handler);
@@ -31,19 +29,18 @@ TODO
 - put enemy class into separate script
 - more words (allow users to upload own .txt files)
 - fix settings menu with difficulty
-- easter egg (?)
 - highscores
 - prevent enemies from spawning on top of eachother 
+- easter eggs (?)
 */
 
 // GLOBAL VARIABLES
-let chr; // charactre pressed
+let chr; // character pressed
 let key_pressed = false; // key_pressed bool
 let current_word = ""; // current input string
 let word_index = 0; //
 let word_x; // input x-position
 let word_y; // input y-position
-let started = false; // bool to check if user has typed "start"
 const word_list = [
   "angry",
   "skateboard",
@@ -53,32 +50,17 @@ const word_list = [
   "lemons",
   "keyboard",
 ];
+let enemies = [];
 let focusedEnemy = 0; // which enemy is in focus
 let word_speed = 0; // speed word is moving by
 let delta_time = 0.0;
+let placeholder_time = 0.0;
 let word_counter = 0; // number of enemies destroyed
 let spawnrate = 0; // number of words at the screen at the same time
 let score = 0;
 let difficulty = 0; // Currently does nothing. scaleable with time or no. of words killed?
-let start_time = new Date().getTime() / 1000; // start-time in seconds
-let menu_enemy = [];
-let game_is_over = false;
-let in_settings = false;
-let setUpComplete = false;
-
-function start_clock() {
-  if (started) start_time = new Date().getTime() / 1000;
-}
-
-// currently shows infinite, fix
-function get_wpm() {
-  /* calculates wpm */
-  var minutes = delta_time / 60;
-  var wpm = Math.floor(word_counter / minutes);
-  ctx.fillStyle = "orange";
-  ctx.font = "16px Arial";
-  ctx.fillText(wpm.toString(), 900, 50);
-}
+let start_time = 0; // start-time in seconds
+let gameState = "start";
 
 class Enemy {
   constructor(text, x_pos, y_pos, dead, placeholder_x, chrs_correct) {
@@ -100,18 +82,14 @@ class Enemy {
         } else {
           ctx.fillStyle = "white";
         }
-        ctx.font = "28px Arial";
+        ctx.font = "32px Arial";
         ctx.fillText(ch, this.x_pos, this.y_pos);
         this.x_pos += ctx.measureText(ch).width;
       }
       this.x_pos = this.placeholder_x; // reset x location
     } else {
       this.text = word_list[Math.floor(Math.random() * word_list.length)];
-      if (started) {
-        this.x_pos = 0;
-      } else {
-        this.x_pos = -200;
-      } // sets position off-screen if not started
+      this.x_pos = 0;
       this.y_pos = Math.floor(Math.random() * canvas.height);
       if (this.y_pos > canvas.height / 2) {
         this.y_pos -= 20;
@@ -122,11 +100,8 @@ class Enemy {
     }
   }
 
+  // this function updates the chrs_correct variable to the correct number of correct characters
   get_chrs_correct() {
-    /* 
-            this function updates the chrs_correct variable to the correct
-            number of correct characters 
-        */
     this.chrs_correct = 0;
     for (var i = 0; i < this.text.length; i++) {
       if (this.text.charAt(i) == current_word.charAt(i)) {
@@ -138,84 +113,69 @@ class Enemy {
   }
 }
 
-// generate enemies
-const enemies = [];
-for (var i = 0; i < 6; i++) {
-  enemies[i] = new Enemy("", -50, 200, true, "");
-  spawnrate++;
+// start menu
+function start() {
+  enemies = [];
+  const start_enemy = new Enemy(
+    "start",
+    (canvas.width / 100) * 50,
+    (canvas.height / 100) * 50,
+    false
+  );
+  const options_enemy = new Enemy(
+    "options",
+    (canvas.width / 100) * 50,
+    (canvas.height / 100) * 60,
+    false
+  );
+
+  enemies.push(start_enemy, options_enemy);
+  for (const enemy of enemies) enemy.draw();
 }
 
-function start_or_lose() {
-  /* 
-        start and lose "menues" 
-    */
-  if (started != true && in_settings === false) {
-    enemies[0].text = "start";
-    enemies[0].x_pos = (canvas.width / 100) * 50;
-    enemies[0].y_pos = (canvas.height / 100) * 50;
-    enemies[1].text = "options";
-    enemies[1].x_pos = (canvas.width / 100) * 50;
-    enemies[1].y_pos = (canvas.height / 100) * 60;
-    if (game_is_over) {
-      game_over();
-    }
+// Options menu
+function options_menu() {
+  enemies = [];
+  const option_enemy_regular = new Enemy(
+    "regular",
+    (canvas.width / 100) * 50,
+    (canvas.height / 100) * 40,
+    false
+  );
+  const option_enemy_extreme = new Enemy(
+    "extreme",
+    (canvas.width / 100) * 50,
+    (canvas.height / 100) * 50,
+    false
+  );
+  const option_enemy_help = new Enemy(
+    "help",
+    (canvas.width / 100) * 50,
+    (canvas.height / 100) * 60,
+    false
+  );
+
+  enemies.push(option_enemy_regular, option_enemy_extreme, option_enemy_help);
+  for (const enemy of enemies) enemy.draw();
+
+  if (current_word === "help") {
+    ctx.fillStyle = "black";
+    ctx.fillRect(
+      option_enemy_help.x_pos,
+      option_enemy_help.y_pos - 28,
+      ctx.measureText(option_enemy_help.text).width,
+      40
+    );
+    option_enemy_help.text = "write 'surrender' to give up";
   }
-  // check if enemy is off screen
-  for (const enemy of enemies) {
-    if (enemy.x_pos > canvas.width) {
-      started = false; // stop game
-      spawnrate = 6;
-      enemies.splice(5, enemies.length - 5);
-      word_speed = 0; // stop movement
-      for (e of enemies) {
-        e.x_pos = -200;
-      }
-      game_is_over = true;
-      score = Math.floor(delta_time);
-    }
-  }
 }
 
-function settings_menu() {
-  enemies[0].text = "medium";
-  enemies[0].x_pos = (canvas.width / 100) * 50;
-  enemies[0].y_pos = (canvas.height / 100) * 50;
-  enemies[1].text = "extreme";
-  enemies[1].x_pos = (canvas.width / 100) * 50;
-  enemies[1].y_pos = (canvas.height / 100) * 60;
-  enemies[2].text = "help";
-  enemies[2].x_pos = (canvas.width / 100) * 50;
-  enemies[2].y_pos = (canvas.height / 100) * 70;
-
-  if (current_word === enemies[0].text) {
-    difficulty = 0;
-    in_settings = false;
-  } else if (current_word === enemies[1].text) {
-    difficulty = 1;
-    in_settings = false;
-  } else if (current_word === enemies[2].text) {
-    enemies[2].text = "Just type man, write 'surrender' if you chicken out ";
-    difficulty = 0;
-    in_settings = false;
-  }
-  started = true;
-}
-
-function game_over() {
-  /* this function displays game-over screen */
-  ctx.fillStyle = "white";
-  ctx.font = "30px Arial";
-  ctx.fillText("You survived for " + score.toString() + " seconds.", 100, 100);
-  ctx.fillText("You killed " + word_counter.toString() + " words.", 100, 200);
-}
-
+// Loops through current word and colors characters accordingly
 function draw_input() {
-  /* 
-        loops through current word and colors 
-        characters accordingly 
-    */
   for (var i = 0; i < current_word.length; i++) {
     var ch = current_word.charAt(i);
+    //blir fortfarande fel här när det inte finns några fiender att döda...
+    //felet sker endast om man förlorat genom att skriva 'surrender', inte om man förlorar "naturligt"
     if (i < enemies[focusedEnemy].chrs_correct) {
       ctx.fillStyle = "white";
     } else {
@@ -227,34 +187,23 @@ function draw_input() {
   }
 }
 
+// finds focus based on first character of word and how far it is from the end of the screen
 function find_focus() {
-  /* finds focus based on first character of word
-       and how far it is from the end of the screen */
-  if (started === false) {
-    if (current_word.charAt(0) === "s") {
-      focusedEnemy = 0;
-    } else if (current_word.charAt(0) === "o") {
-      focusedEnemy = 1;
-    }
-  } else {
-    var highest = -10000;
-    for (const enemy of enemies) {
-      if (current_word.charAt(0) === enemy.text.charAt(0)) {
-        if (enemy.x_pos > highest) {
-          highest = enemy.x_pos;
-          focusedEnemy = enemies.indexOf(enemy);
-        }
+  var highest = -10000; // Magic number, what does it mean?
+  for (const enemy of enemies) {
+    if (current_word.charAt(0) === enemy.text.charAt(0)) {
+      if (enemy.x_pos > highest) {
+        highest = enemy.x_pos;
+        focusedEnemy = enemies.indexOf(enemy);
       }
     }
   }
 }
 
-let placeholder_time = 0.0;
-
-// unsure if this works. doesnt feel like it anyway
+// *unsure if this works. doesnt feel like it anyway*
+// increases numbers of words on screen every 5 seconds
 function dynamic_difficulty() {
-  /* increases numbers of words on screen every 5 seconds */
-  if (started === true && placeholder_time === 0.0) {
+  if (placeholder_time === 0.0) {
     placeholder_time = delta_time;
   }
   if (delta_time - placeholder_time > 5) {
@@ -266,41 +215,78 @@ function dynamic_difficulty() {
   }
 }
 
-function setUp() {
-  start_clock(); // starts clock once game starts
-  delta_time = new Date().getTime() / 1000 - start_time; // seconds after start
-  setUpComplete = true;
+// currently shows infinite, fix
+function get_wpm() {
+  /* calculates wpm */
+  var minutes = delta_time / 60;
+  var wpm = Math.floor(word_counter / minutes);
+  ctx.fillStyle = "orange";
+  ctx.font = "22px Arial";
+  ctx.fillText(wpm.toString(), 900, 50);
+}
+
+/* displays game-over screen */
+function game_over() {
+  enemy_restart = new Enemy("r", -50, 200, false, "");
+  enemies.push(enemy_restart);
+  ctx.fillStyle = "white";
+  ctx.font = "30px Arial";
+  ctx.fillText("You survived for " + score.toString() + " seconds.", 100, 100);
+  ctx.fillText("You killed " + word_counter.toString() + " words.", 100, 200);
+  ctx.fillText("Type 'r' to Restart", 100, 300);
+}
+
+// sets all game variables to 0 and takes the player back to start
+function resetGame() {
+  current_word = "";
+  start_time = 0;
+  delta_time = 0;
+  spawnrate = 0;
+  word_counter = 0;
+  word_speed = 0;
+  focusedEnemy = 0;
+  score = 0;
+  difficulty = 0;
+  console.log("im gonna call for start");
+
+  gameState = "start";
 }
 
 function startGame() {
-  word_speed = 0.4; // words start moving (after start)
-  in_settings = false;
+  word_speed = 0.75; // words start moving (after start)
   word_index = 0; // reset word index
   chrs_correct = 0; // reset chrs correct
+  start_time = new Date().getTime() / 1000; // starts clock once game starts
+  delta_time = new Date().getTime() / 1000 - start_time; // seconds after start
 }
 
+function updateGameLogic() {
+  startGame(); // handles start and lose of game
+  get_wpm(); // displays wpm
+  dynamic_difficulty(); // adjust difficulty dynamically
+}
+
+// the game-loop
 function draw() {
-  // the game-loop
   // clear canvas
   resizeCanvas();
   ctx.fillStyle = "black";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  if (in_settings) {
-    settings_menu();
-  }
-
-  if (!setUpComplete) setUp();
-  if (!started) startGame();
-
-  dynamic_difficulty(); // enables harder and harder
-  start_or_lose(); // handles start and lose of game
-  get_wpm(); // displays wpm
-  find_focus(); // finds which enemy to focus
-
-  for (var i = 0; i < enemies.length; i++) {
-    enemies[i].draw(); // draws enemy
-    enemies[i].x_pos += word_speed; // moves enemy
+  // Handle different game states
+  switch (gameState) {
+    case "start":
+      start();
+      break;
+    case "menu":
+      options_menu();
+      break;
+    case "running":
+      updateGameLogic();
+      break;
+    case "game_over":
+      game_over();
+      break;
   }
 
   // places user-inputs in bottom right corner
@@ -309,17 +295,24 @@ function draw() {
 
   if (key_pressed) {
     if (chr === "enter") {
-      console.log(current_word);
-      if (current_word === "surrender" && started) {
-        enemies.length = 0; //Find a way that clears all enemies from the screen but respawns start and options
-        game_over();
-      }
-
-      if (current_word === enemies[focusedEnemy].text) {
-        if (started === false) {
-          in_settings = true; // turn on settings menu
-        }
-
+      if (
+        current_word === "surrender" &&
+        (gameState === "running" || gameState === "menu")
+      ) {
+        current_word = "";
+        gameState = "game_over";
+      } else if (current_word === "regular" && gameState === "menu") {
+        difficulty = 1;
+        gameState = "running";
+      } else if (current_word === "extreme" && gameState === "menu") {
+        difficulty = 1.5;
+        gameState = "running";
+      } else if (current_word === "r" && gameState === "game_over") {
+        resetGame();
+      } else if (current_word === enemies[focusedEnemy].text) {
+        if (current_word === "start") gameState = "running";
+        else if (current_word === "options" && gameState !== "running")
+          gameState = "menu"; // turn on settings menu
         enemies[focusedEnemy].dead = true; // random_word is destroyed
         word_counter++; // increase eniemies destroyed
       }
@@ -342,7 +335,25 @@ function draw() {
     console.warn("Invalid focus index:", focusedEnemy);
   }
 
+  // check if enemy is off screen
+  for (const enemy of enemies) {
+    if (enemy.x_pos > canvas.width) {
+      enemies = [];
+      word_speed = 0; // stop movement
+      gameState = "game_over";
+      score = Math.floor(delta_time);
+    }
+  }
+
+  if (gameState !== "game_over") {
+    for (var i = 0; i < enemies.length; i++) {
+      enemies[i].draw(); // draws enemy
+      enemies[i].x_pos += word_speed; // moves enemy
+    }
+  }
+
   draw_input(); // display the current guess
+  find_focus(); // finds which enemy to focus
 
   requestAnimationFrame(draw);
 }
