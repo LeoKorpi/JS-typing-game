@@ -27,10 +27,9 @@ function resizeCanvas() {
 /*
 TODO
 - put enemy class into separate script
-- more words (allow users to upload own .txt files)
-- fix settings menu with difficulty
-- highscores
-- prevent enemies from spawning on top of eachother 
+- allow users to upload own .txt files?
+-- https://www.geeksforgeeks.org/how-to-read-a-local-text-file-using-javascript/
+- highscores 
 - easter eggs (?)
 */
 
@@ -41,30 +40,63 @@ let current_word = ""; // current input string
 let word_index = 0; // index of the letter in a word
 let word_x; // input x-position
 let word_y; // input y-position
-const word_list = [
-  "angry",
-  "skateboard",
-  "wifi",
-  "computer",
-  "dogs",
-  "lemons",
-  "keyboard",
-];
+let word_list = []; // The words the enemies will have, filled by fetching from https://random-word-api.herokuapp.com/home
 let enemies = [];
 let focusedEnemy = 0; // which enemy is in focus
 let word_speed = 0; // speed word is moving by
 let delta_time = 0.0;
-let placeholder_time = 0.0;
 let word_counter = 0; // number of enemies destroyed
 let spawnrate = 0; // number of words at the screen at the same time
 let score = 0;
 let difficulty = 0; // Currently does nothing. scaleable with time or no. of words killed?
 let start_time = 0; // start-time in seconds
+let wordsFetched = false;
+let fetchingInProgress = false;
 let started = false;
-let gameState = "start";
+let makeHarder = false;
+let gameState = "loading";
+
+async function fetchRandomWords(wordCount, maxLength) {
+  try {
+    const batchSize = wordCount * 10;
+
+    const response = await fetch(
+      `https://random-word-api.herokuapp.com/word?number=${batchSize}`
+    );
+    if (!response.ok) {
+      throw new Error("Network response was not ok");
+    }
+    let words = await response.json();
+    words = words.filter((word) => word.length <= maxLength);
+    return words.slice(0, wordCount);
+  } catch (error) {
+    console.error("Failed to fetch words: ", error);
+    return [];
+  }
+}
+
+async function loadWords() {
+  if (!wordsFetched && !fetchingInProgress) {
+    fetchingInProgress = true;
+    word_list = await fetchRandomWords(150, 9);
+    console.log("Word list populated: ", word_list);
+    wordsFetched = true;
+    initializeEnemies();
+    gameState = "start";
+  }
+}
+
+function initializeEnemies() {
+  enemies = [];
+  for (let i = 0; i < spawnrate; i++) {
+    const word = word_list[Math.floor(Math.random() * word_list.length)];
+    enemies.push(new Enemy(word, -50, Math.random() * canvas.height, false));
+  }
+  focusedEnemy = 0;
+}
 
 class Enemy {
-  constructor(text, x_pos, y_pos, dead, placeholder_x, chrs_correct) {
+  constructor(text, x_pos, y_pos, dead, placeholder_x, chrs_correct = 0) {
     this.text = text;
     this.x_pos = x_pos;
     this.y_pos = y_pos;
@@ -75,8 +107,9 @@ class Enemy {
     this.adjustYPosition();
   }
 
+  // Doesnt completely work, its possible for words to spawn on top of each other after adjusting once
   adjustYPosition() {
-    const minY = 120;
+    const minY = 80;
     const maxY = canvas.height - minY;
 
     if (this.y_pos < minY) this.y_pos = minY;
@@ -90,8 +123,8 @@ class Enemy {
         if (enemy !== this && Math.abs(enemy.y_pos - this.y_pos) < 40) {
           overlap = true;
           this.y_pos += 30;
-          if (this.y_pos > canvas.height) {
-            this.y_pos = 20;
+          if (this.y_pos > maxY) {
+            this.y_pos = minY;
           }
           break;
         }
@@ -101,7 +134,9 @@ class Enemy {
   }
 
   draw() {
-    if (this.dead == false) {
+    if (this.dead) {
+      this.respawn();
+    } else {
       this.placeholder_x = this.x_pos; // set placeholder
       for (var i = 0; i < this.text.length; i++) {
         var ch = this.text.charAt(i);
@@ -114,16 +149,10 @@ class Enemy {
         this.x_pos += ctx.measureText(ch).width;
       }
       this.x_pos = this.placeholder_x; // reset x location
-    } else {
-      this.text = word_list[Math.floor(Math.random() * word_list.length)];
-      this.x_pos = 0;
-      this.y_pos = Math.floor(Math.random() * canvas.height);
-      this.adjustYPosition();
-      this.dead = false;
     }
   }
 
-  // this function updates the chrs_correct variable to the correct number of correct characters
+  // updates the chrs_correct variable to the correct number of correct characters
   get_chrs_correct() {
     this.chrs_correct = 0;
     for (var i = 0; i < this.text.length; i++) {
@@ -133,6 +162,14 @@ class Enemy {
         break;
       }
     }
+  }
+
+  respawn() {
+    this.text = word_list[Math.floor(Math.random() * word_list.length)];
+    this.x_pos = -50;
+    this.y_pos = Math.random() * canvas.height;
+    this.dead = false;
+    this.adjustYPosition();
   }
 }
 
@@ -153,7 +190,6 @@ function start() {
   );
 
   enemies.push(start_enemy, options_enemy);
-  for (const enemy of enemies) enemy.draw();
 }
 
 // Options menu
@@ -179,7 +215,6 @@ function options_menu() {
   );
 
   enemies.push(option_enemy_regular, option_enemy_extreme, option_enemy_help);
-  for (const enemy of enemies) enemy.draw();
 
   if (current_word === "help") {
     ctx.fillStyle = "black";
@@ -197,7 +232,6 @@ function options_menu() {
 function draw_input() {
   for (var i = 0; i < current_word.length; i++) {
     var ch = current_word.charAt(i);
-    //blir fortfarande fel här när det inte finns några fiender att döda...
     if (i < enemies[focusedEnemy].chrs_correct) {
       ctx.fillStyle = "white";
     } else {
@@ -222,18 +256,16 @@ function find_focus() {
   }
 }
 
-// *unsure if this works. doesnt feel like it anyway*
-// increases numbers of words on screen every 5 seconds
+// increases numbers of words on screen for every 8 words killed
 function dynamic_difficulty() {
-  if (placeholder_time === 0.0) {
-    placeholder_time = delta_time;
-  }
-  if (delta_time - placeholder_time > 5) {
-    spawnrate++;
-    placeholder_time = 0.0;
+  if (word_counter % 8 !== 0) makeHarder = true;
+  if (word_counter % 8 === 0 && makeHarder) {
+    word_speed += difficulty / 20;
+    spawnrate += difficulty;
+    makeHarder = false;
   }
   if (enemies.length < spawnrate) {
-    enemies[enemies.length] = new Enemy("", -50, 200, true, "");
+    enemies[enemies.length] = new Enemy("", -50, 0, true);
   }
 }
 
@@ -244,8 +276,8 @@ function get_wpm() {
     var minutes = delta_time / 60;
     var wpm = Math.floor(word_counter / minutes);
     ctx.fillStyle = "orange";
-    ctx.font = "22px Arial";
-    ctx.fillText(wpm.toString(), 900, 50);
+    ctx.font = "24px Arial";
+    ctx.fillText(`WPM : ${wpm.toString()}`, canvas.width / 2 + 100, 100);
   }
 }
 
@@ -276,14 +308,15 @@ function resetGame() {
   gameState = "start";
 }
 
-function startClock() {
+function setup() {
   start_time = new Date().getTime() / 1000;
+  word_speed = 0.75;
+  spawnrate = 3;
   started = true;
 }
 
 function updateGameLogic() {
-  if (!started) startClock();
-  word_speed = 0.75; // words start moving (after start)
+  if (!started) setup();
   delta_time = new Date().getTime() / 1000 - start_time;
   get_wpm(); // displays wpm
   dynamic_difficulty(); // adjust difficulty dynamically
@@ -298,6 +331,13 @@ function endTheGame() {
   gameState = "game_over";
 }
 
+async function loading() {
+  ctx.fillStyle = "white";
+  ctx.font = "32px Arial";
+  ctx.fillText("Loading...", canvas.width / 2 - 50, canvas.height / 2);
+  loadWords();
+}
+
 // the game-loop
 function draw() {
   // clear canvas
@@ -307,6 +347,9 @@ function draw() {
 
   // Handle different game states
   switch (gameState) {
+    case "loading":
+      loading();
+      break;
     case "start":
       start();
       break;
@@ -343,6 +386,7 @@ function draw() {
         } else if (current_word === "r" && gameState === "game_over") {
           resetGame();
         } else if (current_word === "start") {
+          difficulty = 1;
           gameState = "running";
         } else if (current_word === "options" && gameState !== "running") {
           gameState = "menu"; // turn on settings menu
@@ -366,28 +410,33 @@ function draw() {
     key_pressed = false; // not accepting keypress
   }
 
-  if (focusedEnemy >= 0 && focusedEnemy < enemies.length) {
-    enemies[focusedEnemy].get_chrs_correct(); // updates chrs_correct
-  } else {
-    console.warn("Invalid focus index:", focusedEnemy);
-  }
-
   // check if enemy is off screen
-  for (const enemy of enemies) {
-    if (enemy.x_pos > canvas.width) {
-      endTheGame();
+  if (enemies.length > 0) {
+    for (const enemy of enemies) {
+      if (enemy.x_pos > canvas.width) {
+        endTheGame();
+      }
     }
   }
 
-  if (gameState !== "game_over") {
+  // Spawns and moves enemies
+  if (gameState !== "game_over" && gameState !== "loading") {
     for (var i = 0; i < enemies.length; i++) {
+      enemies[i].get_chrs_correct();
       enemies[i].draw(); // draws enemy
       enemies[i].x_pos += word_speed; // moves enemy
     }
   }
 
-  draw_input(); // display the current guess
+  if (gameState !== "loading" && enemies.length > 0) {
+    if (focusedEnemy >= 0 && focusedEnemy < enemies.length) {
+      enemies[focusedEnemy].get_chrs_correct(); // updates chrs_correct
+    } else {
+      console.warn("Invalid focus index:", focusedEnemy);
+    }
+  }
   find_focus(); // finds which enemy to focus
+  draw_input(); // display the current guess
 
   requestAnimationFrame(draw);
 }
