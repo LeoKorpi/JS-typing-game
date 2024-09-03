@@ -17,6 +17,7 @@ function key_down_handler(event) {
   }
 }
 
+// Resizes canvas equal to window size (responsive yay)
 function resizeCanvas() {
   canvas.width = window.innerWidth;
   canvas.height = window.innerHeight;
@@ -56,6 +57,7 @@ let started = false;
 let makeHarder = false;
 let gameState = "loading";
 
+// gets 150 words with 9 or less characters
 async function fetchRandomWords(wordCount, maxLength) {
   try {
     const batchSize = wordCount * 10;
@@ -75,6 +77,7 @@ async function fetchRandomWords(wordCount, maxLength) {
   }
 }
 
+// loads the fetched words into the array before proceeding
 async function loadWords() {
   if (!wordsFetched && !fetchingInProgress) {
     fetchingInProgress = true;
@@ -86,6 +89,7 @@ async function loadWords() {
   }
 }
 
+// Async functions always return a promise, so filling the enemies array needs to be a separate function
 function initializeEnemies() {
   enemies = [];
   for (let i = 0; i < spawnrate; i++) {
@@ -107,7 +111,7 @@ class Enemy {
     this.adjustYPosition();
   }
 
-  // Doesnt completely work, its possible for words to spawn on top of each other after adjusting once
+  // Doesnt completely work, its still possible for words to spawn on top of each other after adjusting once
   adjustYPosition() {
     const minY = 80;
     const maxY = canvas.height - minY;
@@ -269,9 +273,8 @@ function dynamic_difficulty() {
   }
 }
 
-// currently shows infinite, fix
+// calculates and displays words per minute
 function get_wpm() {
-  /* calculates wpm */
   if (delta_time > 0) {
     var minutes = delta_time / 60;
     var wpm = Math.floor(word_counter / minutes);
@@ -308,6 +311,7 @@ function resetGame() {
   gameState = "start";
 }
 
+// sets variables to values once the game starts
 function setup() {
   start_time = new Date().getTime() / 1000;
   word_speed = 0.75;
@@ -331,7 +335,7 @@ function endTheGame() {
   gameState = "game_over";
 }
 
-async function loading() {
+function loading() {
   ctx.fillStyle = "white";
   ctx.font = "32px Arial";
   ctx.fillText("Loading...", canvas.width / 2 - 50, canvas.height / 2);
@@ -368,6 +372,7 @@ function draw() {
   word_x = (canvas.width / 100) * 70;
   word_y = (canvas.height / 100) * 75;
 
+  //Long ahh if-statement for what happens when a key is pressed
   if (key_pressed) {
     if (chr === "enter") {
       if (
@@ -422,7 +427,7 @@ function draw() {
   // Spawns and moves enemies
   if (gameState !== "game_over" && gameState !== "loading") {
     for (var i = 0; i < enemies.length; i++) {
-      enemies[i].get_chrs_correct();
+      enemies[i].get_chrs_correct(); // needed to make letters in menu and start green
       enemies[i].draw(); // draws enemy
       enemies[i].x_pos += word_speed; // moves enemy
     }
